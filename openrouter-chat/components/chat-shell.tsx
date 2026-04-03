@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { createClientId } from "../lib/client-id";
+import { splitMessageContent } from "../lib/message-content";
 import type { ChatStreamEvent } from "../lib/types";
 
 type ChatRole = "user" | "assistant" | "system";
@@ -18,7 +20,7 @@ type ChatMessage = {
 
 function createMessage(role: ChatRole, content: string): ChatMessage {
   return {
-    id: `${role}-${crypto.randomUUID()}`,
+    id: createClientId(role),
     role,
     content,
   };
@@ -40,6 +42,19 @@ function parseSseFrame(rawFrame: string): ChatStreamEvent | "[DONE]" | null {
   }
 
   return JSON.parse(payload) as ChatStreamEvent;
+}
+
+function renderMarkdownInline(content: string) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <>{children}</>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
 }
 
 export function ChatShell() {
@@ -163,7 +178,7 @@ export function ChatShell() {
       return;
     }
 
-    const assistantId = `assistant-${crypto.randomUUID()}`;
+    const assistantId = createClientId("assistant");
     setValue("");
     setPending(true);
     setPendingSince(Date.now());
@@ -289,9 +304,61 @@ export function ChatShell() {
                 </div>
               ) : message.role === "assistant" ? (
                 <div className="message-markdown">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.content || " "}
-                  </ReactMarkdown>
+                  {splitMessageContent(message.content || " ").map((block, index) =>
+                    block.type === "markdown" ? (
+                      <ReactMarkdown key={`${message.id}-md-${index}`} remarkPlugins={[remarkGfm]}>
+                        {block.content || " "}
+                      </ReactMarkdown>
+                    ) : (
+                      <div
+                        key={`${message.id}-table-${index}`}
+                        className="message-table-wrap"
+                      >
+                        <table className="message-table">
+                          <thead>
+                            <tr>
+                              {block.headers.map((header, headerIndex) => (
+                                <th
+                                  key={`${message.id}-th-${index}-${headerIndex}`}
+                                  style={{
+                                    textAlign:
+                                      block.align[headerIndex] === "right"
+                                        ? "right"
+                                        : block.align[headerIndex] === "center"
+                                          ? "center"
+                                          : "left",
+                                  }}
+                                >
+                                  {renderMarkdownInline(header)}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {block.rows.map((row, rowIndex) => (
+                              <tr key={`${message.id}-tr-${index}-${rowIndex}`}>
+                                {row.map((cell, cellIndex) => (
+                                  <td
+                                    key={`${message.id}-td-${index}-${rowIndex}-${cellIndex}`}
+                                    style={{
+                                      textAlign:
+                                        block.align[cellIndex] === "right"
+                                          ? "right"
+                                          : block.align[cellIndex] === "center"
+                                            ? "center"
+                                            : "left",
+                                    }}
+                                  >
+                                    {renderMarkdownInline(cell)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ),
+                  )}
                 </div>
               ) : (
                 <div className="message-content">{message.content}</div>
