@@ -1,0 +1,17 @@
+[Unit]
+Description=WB Dashboard OpenRouter Chat
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/wbdash/openrouter-chat
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+EnvironmentFile=/opt/wbdash/.env
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
